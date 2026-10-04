@@ -1,0 +1,530 @@
+version "4.14"
+
+// R.E.P.O. Takeover: haunted-warehouse looting inside Doom. Gnomes, killer ducks, fragile vases, a haul to extract.
+
+class RepoToast
+{
+	String text;
+	int color;
+	int age;
+}
+
+class RepoHandler : EventHandler
+{
+	int haul;
+	int quota;
+	int round;
+	Array<RepoToast> toasts;
+
+	int nextWave, waveNo;
+	bool seeFirst;
+
+	override void OnRegister() { quota = 10000; round = 1; }
+
+	static RepoHandler Get() { return RepoHandler(EventHandler.Find("RepoHandler")); }
+
+	void Earn(int amount, String what)
+	{
+		haul += amount;
+		Toast(String.Format("%s  +$%s", what, Cash(amount)), Font.CR_GOLD);
+		if (haul >= quota) QuotaMet();
+	}
+
+	void Lose(int amount, String what)
+	{
+		haul = max(0, haul - amount / 2);
+		Toast(String.Format("%s  -$%s", what, Cash(amount)), Font.CR_RED);
+	}
+
+	void Toast(String t, int col)
+	{
+		let n = new("RepoToast");
+		n.text = t; n.color = col; n.age = 0;
+		toasts.Push(n);
+		if (toasts.Size() > 5) toasts.Delete(0);
+	}
+
+	clearscope static String Cash(int v)
+	{
+		String s = String.Format("%d", v);
+		if (v >= 1000) s = String.Format("%d,%03d", v / 1000, v % 1000);
+		return s;
+	}
+
+	void QuotaMet()
+	{
+		round++;
+		haul = max(0, haul - quota);
+		quota = 10000 + 10000 * (round - 1);
+		Toast("QUOTA MET! THE TRUCK PAYS OUT. UPGRADES UNLOCKED!", Font.CR_GREEN);
+		Console.MidPrint(BigFont, "QUOTA MET!\nHEAD TO THE TRUCK!");
+		for (int i = 0; i < MAXPLAYERS; i++)
+		{
+			if (!playeringame[i] || !players[i].mo) continue;
+			let p = players[i].mo;
+			p.A_StartSound("repo/alarm", CHAN_AUTO, CHANF_UI);
+			p.GiveInventory("Backpack", 1);
+			p.GiveInventory("BlueArmor", 1);
+			p.GiveInventory("Shotgun", 1);
+			p.GiveInventory("Shell", 20);
+			p.GiveInventory("RocketLauncher", 1);
+			p.GiveInventory("RocketAmmo", 10);
+			p.GiveInventory("Health", 50);
+			// the duck heard the payout
+			p.A_SpawnItemEx("RepoDuck", 260, 0, 0, 0, 0, 0, 0, SXF_NOCHECKPOSITION);
+		}
+	}
+
+	// Loot raids: every few seconds the warehouse sends something new at the player.
+	// Puts something near the player: loot where they can see it, raiders from any side (they hunt the player at once).
+	bool Put(Actor p, Class<Actor> cls, double ang, double dist)
+	{
+		bool raider = (Class<Actor>)(cls) is "Actor" && GetDefaultByType(cls).bISMONSTER;
+		static const double TRY[] = { 0, 40, -40, 80, -80, 120, -120, 160 };
+		for (int k = 0; k < 8; k++)
+		{
+			if ((!raider || seeFirst) && k > 4) break;
+			for (double d = dist; d > 90; d -= 50)
+			{
+				let a = Actor.Spawn(cls, p.Vec3Angle(d, p.angle + ang + TRY[k], 0), ALLOW_REPLACE);
+				if (!a) continue;
+				a.SetZ(a.floorz);
+				if (!a.TestMobjLocation() || ((!raider || seeFirst) && !p.CheckSight(a))) { a.Destroy(); continue; }
+				if (raider) { a.target = p; a.SetStateLabel("See"); }
+				return true;
+			}
+		}
+		return false;
+	}
+
+	int CountLive()
+	{
+		let pl = players[consoleplayer].mo;
+		int n = 0;
+		let it = ThinkerIterator.Create("Actor");
+		Actor a;
+		while (a = Actor(it.Next())) if ((a is "RepoGnome" || a is "RepoDuck") && a.health > 0 && pl && a.Distance3D(pl) < 900) n++;
+		return n;
+	}
+
+	void Wave()
+	{
+		let p = players[consoleplayer].mo;
+		if (!p) return;
+		int w = waveNo++;
+		seeFirst = (w == 0);
+		bool crowded = CountLive() >= 3;
+		switch (w % 8)
+		{
+		case 0: Put(p, "RepoDuck", 0, 190); Put(p, "RepoGnome", 35, 150); Put(p, "RepoVase", 25, 180); Put(p, "RepoVase", -25, 180); Put(p, "RepoVase", 50, 200); Put(p, "RepoGem", 0, 140); break;
+		case 1: if (!crowded) Put(p, "RepoGnomeElder", 15, 300); Put(p, "RepoGold", -20, 150); break;
+		case 2: if (!crowded) { Put(p, "RepoGnome", -20, 280); Put(p, "RepoGnome", 25, 280); } Put(p, "RepoVase", 0, 170); break;
+		case 3: if (!crowded) Put(p, "RepoDuck", 0, 360); Put(p, "RepoGem", 30, 160); break;
+		case 4: if (!crowded) Put(p, "RepoGnomeHunter", -15, 300); Put(p, "RepoVase", 20, 170); Put(p, "RepoGold", -30, 170); break;
+		case 5: if (!crowded) Put(p, "RepoGnomeElder", 20, 300); Put(p, "RepoGem", -20, 150); break;
+		case 6: if (!crowded) Put(p, "RepoDuck", -10, 380); Put(p, "RepoVase", 25, 160); break;
+		default: if (!crowded) Put(p, "RepoGnome", 0, 280); Put(p, "RepoGem", 10, 150); Put(p, "RepoVase", -25, 170); break;
+		}
+		nextWave = level.maptime + 35 * 7;
+	}
+
+	override void WorldTick()
+	{
+		if (level.maptime >= 25 && (level.maptime >= nextWave || (level.maptime % 35 == 0 && level.maptime >= nextWave - 35 * 5 && CountLive() == 0))) Wave();
+		for (int i = toasts.Size() - 1; i >= 0; i--)
+		{
+			toasts[i].age++;
+			if (toasts[i].age > 140) toasts.Delete(i);
+		}
+	}
+
+	override void PlayerEntered(PlayerEvent e)
+	{
+		let p = players[e.PlayerNumber].mo;
+		if (!p) return;
+		// a little loot room around the player's start
+		for (int i = 0; i < 4; i++)
+		{
+			p.A_SpawnItemEx(i % 2 ? "RepoVase" : "RepoGem", 140, -90 + i * 60, 0, 0, 0, 0, 0, SXF_NOCHECKPOSITION);
+		}
+		Toast("R.E.P.O. TAKEOVER: GRAB THE LOOT. DON'T BREAK IT.", Font.CR_WHITE);
+	}
+
+	override void WorldThingSpawned(WorldEvent e)
+	{
+		let t = e.Thing;
+		// some pickups lying in the level get a vase next to them
+		if (t && level.maptime == 0 && t is "Inventory" && Inventory(t).bSPECIAL && random(0, 2) == 0)
+		{
+			Actor.Spawn("RepoVase", t.pos + (28, 0, 0));
+		}
+	}
+
+	override void WorldThingDied(WorldEvent e)
+	{
+		let t = e.Thing;
+		if (t is "RepoDuck") { Earn(1000, "DUCK EXTRACTED"); Burst(t, 14); }
+		else if (t is "RepoGnome") { Earn(200, "GNOME DOWN"); Burst(t, 6); }
+	}
+
+	void Burst(Actor t, int n)
+	{
+		for (int i = 0; i < n; i++)
+			t.A_SpawnParticle(0xFFD700, SPF_FULLBRIGHT, 40, 6, 0, 0, 0, t.height * 0.6, frandom(-4, 4), frandom(-4, 4), frandom(4, 9), 0, 0, -0.5);
+	}
+
+	override void RenderOverlay(RenderEvent e)
+	{
+		int w = 320, h = 200;
+		let f = SmallFont;
+		String s = String.Format("HAUL $%s", Cash(haul));
+		Screen.DrawText(BigFont, Font.CR_GOLD, 8, 6, s, DTA_VirtualWidth, w, DTA_VirtualHeight, h);
+		Screen.DrawText(f, Font.CR_WHITE, 8, 24, String.Format("QUOTA $%s", Cash(quota)), DTA_VirtualWidth, w, DTA_VirtualHeight, h);
+		double frac = clamp(double(haul) / quota, 0., 1.);
+		double sx = Screen.GetWidth() / 320., sy = Screen.GetHeight() / 200.;
+		Screen.Dim(0x000000, 0.6, int(8 * sx), int(34 * sy), int(90 * sx), int(5 * sy));
+		Screen.Dim(0x33DD44, 0.9, int(8 * sx), int(34 * sy), int(90 * frac * sx), int(5 * sy));
+		for (int i = 0; i < toasts.Size(); i++)
+		{
+			let n = toasts[i];
+			double a = n.age > 110 ? 1. - (n.age - 110) / 30. : 1.;
+			int tw = f.StringWidth(n.text);
+			Screen.DrawText(f, n.color, (w - tw) / 2, 150 - (toasts.Size() - 1 - i) * 9, n.text, DTA_VirtualWidth, w, DTA_VirtualHeight, h, DTA_Alpha, a);
+		}
+	}
+}
+
+// ---------- valuables ----------
+
+class RepoVase : Actor
+{
+	int worth;
+	Default
+	{
+		Health 30;
+		Radius 15;
+		Height 54;
+		Mass 100;
+		+SOLID; +SHOOTABLE; +NOBLOOD; +DONTGIB; +NOICEDEATH;
+		DeathSound "repo/shatter";
+		PainSound "repo/hurt";
+		Scale 1.0;
+	}
+
+	override void PostBeginPlay()
+	{
+		Super.PostBeginPlay();
+		worth = random(20, 90) * 100;
+	}
+
+	override int DamageMobj(Actor inflictor, Actor source, int damage, Name mod, int flags, double angle)
+	{
+		int r = Super.DamageMobj(inflictor, source, damage, mod, flags, angle);
+		if (damage > 0)
+			for (int i = 0; i < 5; i++)
+				A_SpawnParticle(0x9FB8FF, SPF_FULLBRIGHT, 25, 3, 0, 0, 0, frandom(8, 36), frandom(-3, 3), frandom(-3, 3), frandom(2, 5), 0, 0, -0.4);
+		return r;
+	}
+
+	void A_Shatter()
+	{
+		for (int i = 0; i < 24; i++)
+			A_SpawnParticle(i % 3 ? 0xE8F0FF : 0x2850D0, SPF_FULLBRIGHT, 45, 4, 0, 0, 0, 20, frandom(-5, 5), frandom(-5, 5), frandom(3, 9), 0, 0, -0.5);
+		let h = RepoHandler.Get();
+		if (h) h.Lose(worth, "VASE SHATTERED");
+		bSolid = false;
+	}
+
+	States
+	{
+	Spawn:
+		VASE A 4 Bright A_JumpIf(health < 16, "Cracked");
+		Loop;
+	Cracked:
+		VASE B 4;
+		Loop;
+	Pain:
+		VASE B 3 A_Pain;
+		Goto Spawn;
+	Death:
+		VASE C 0 A_Shatter;
+		VASE C 1 A_Scream;
+		VASE C -1;
+		Stop;
+	}
+}
+
+class RepoGem : HealthBonus replaces HealthBonus
+{
+	Default
+	{
+		Scale 1.8;
+		+FLOATBOB;
+		Inventory.PickupSound "repo/ching";
+		Inventory.PickupMessage "";
+	}
+
+	override bool TryPickup(in out Actor toucher)
+	{
+		bool r = Super.TryPickup(toucher);
+		if (r) { let h = RepoHandler.Get(); if (h) h.Earn(1000, "BLUE DIAMOND"); }
+		return r;
+	}
+
+	States
+	{
+	Spawn:
+		GEMS A 6 Bright;
+		GEMS A 2 A_SpawnParticle(0xBFEFFF, SPF_FULLBRIGHT, 14, 3, 0, frandom(-6, 6), frandom(-6, 6), frandom(4, 24), 0, 0, 0.5);
+		Loop;
+	}
+}
+
+class RepoGold : ArmorBonus replaces ArmorBonus
+{
+	Default
+	{
+		Scale 1.6;
+		+FLOATBOB;
+		Inventory.PickupSound "repo/ching";
+		Inventory.PickupMessage "";
+	}
+
+	override bool TryPickup(in out Actor toucher)
+	{
+		bool r = Super.TryPickup(toucher);
+		if (r) { let h = RepoHandler.Get(); if (h) h.Earn(3000, "GOLD BARS"); }
+		return r;
+	}
+
+	States
+	{
+	Spawn:
+		GOLD A 6 Bright;
+		GOLD A 2 A_SpawnParticle(0xFFE060, SPF_FULLBRIGHT, 14, 3, 0, frandom(-8, 8), frandom(-8, 8), frandom(4, 24), 0, 0, 0.5);
+		Loop;
+	}
+}
+
+// ---------- monsters ----------
+
+class GnomeKnife : Actor
+{
+	Default
+	{
+		Radius 6;
+		Height 8;
+		Speed 18;
+		Damage 3;
+		Projectile;
+		+RANDOMIZE;
+		Scale 0.7;
+		DeathSound "repo/hurt";
+	}
+	States
+	{
+	Spawn:
+		KNIF ABCD 2;
+		Loop;
+	Death:
+		TNT1 A 0 A_SpawnItemEx("BulletPuff");
+		TNT1 A 1;
+		Stop;
+	}
+}
+
+class RepoGnome : Actor replaces ZombieMan
+{
+	Default
+	{
+		Health 60;
+		Radius 18;
+		Height 58;
+		Speed 8;
+		PainChance 200;
+		Mass 60;
+		Scale 1.0;
+		MeleeRange 48;
+		Monster;
+		+FLOORCLIP;
+		SeeSound "repo/giggle";
+		PainSound "repo/hurt";
+		DeathSound "repo/giggle";
+		ActiveSound "repo/giggle";
+		MissileHeight 24;
+		DropItem "RepoGem", 40;
+	}
+	States
+	{
+	Spawn:
+		GNOM A 10 A_Look;
+		Loop;
+	See:
+		GNOM A 4 A_Chase;
+		GNOM B 4 A_Chase;
+		GNOM A 4 A_Chase;
+		GNOM B 4 A_Chase;
+		Loop;
+	Melee:
+		GNOM C 6 A_FaceTarget;
+		GNOM C 6 A_CustomMeleeAttack(random(2, 4) * 3, "repo/hurt");
+		GNOM A 6 A_Recoil(10);
+		Goto See;
+	Missile:
+		GNOM C 10 A_FaceTarget;
+		GNOM C 6 A_SpawnProjectile("GnomeKnife", 28, 0);
+		GNOM A 8;
+		Goto See;
+	Pain:
+		GNOM D 4;
+		GNOM D 4 A_Pain;
+		Goto See;
+	Death:
+		GNOM D 4;
+		GNOM E 6 A_Scream;
+		GNOM E 6 A_NoBlocking;
+		GNOM E -1;
+		Stop;
+	}
+}
+
+// a bigger, meaner gnome that replaces imps
+class RepoGnomeElder : RepoGnome replaces DoomImp
+{
+	Default
+	{
+		Health 90;
+		Radius 20;
+		Height 64;
+		Scale 1.15;
+		Speed 9;
+		DropItem "RepoGold", 40;
+	}
+	States
+	{
+	Spawn:
+		GNOM A 10 A_Look;
+		Loop;
+	See:
+		GNOM A 4 A_Chase;
+		GNOM B 4 A_Chase;
+		GNOM A 4 A_Chase;
+		GNOM B 4 A_Chase;
+		Loop;
+	Melee:
+		GNOM C 6 A_FaceTarget;
+		GNOM C 6 A_CustomMeleeAttack(random(2, 4) * 3, "repo/hurt");
+		GNOM A 6 A_Recoil(10);
+		Goto See;
+	Missile:
+		GNOM C 8 A_FaceTarget;
+		GNOM C 4 A_SpawnProjectile("GnomeKnife", 34, -6);
+		GNOM C 4 A_SpawnProjectile("GnomeKnife", 34, 6);
+		GNOM A 8;
+		Goto See;
+	Pain:
+		GNOM D 4;
+		GNOM D 4 A_Pain;
+		Goto See;
+	Death:
+		GNOM D 4;
+		GNOM E 6 A_Scream;
+		GNOM E 6 A_NoBlocking;
+		GNOM E -1;
+		Stop;
+	}
+}
+
+class RepoGnomeHunter : RepoGnomeElder replaces ShotgunGuy
+{
+	Default { Health 80; Scale 1.05; }
+	States
+	{
+	Spawn:
+		GNOM A 10 A_Look;
+		Loop;
+	See:
+		GNOM A 4 A_Chase;
+		GNOM B 4 A_Chase;
+		GNOM A 4 A_Chase;
+		GNOM B 4 A_Chase;
+		Loop;
+	Melee:
+		GNOM C 6 A_FaceTarget;
+		GNOM C 6 A_CustomMeleeAttack(random(2, 4) * 3, "repo/hurt");
+		GNOM A 6 A_Recoil(10);
+		Goto See;
+	Missile:
+		GNOM C 6 A_FaceTarget;
+		GNOM C 4 A_SpawnProjectile("GnomeKnife", 36, 0);
+		GNOM A 4 A_FaceTarget;
+		GNOM C 4 A_SpawnProjectile("GnomeKnife", 36, 0);
+		GNOM A 8;
+		Goto See;
+	Pain:
+		GNOM D 4;
+		GNOM D 4 A_Pain;
+		Goto See;
+	Death:
+		GNOM D 4;
+		GNOM E 6 A_Scream;
+		GNOM E 6 A_NoBlocking;
+		GNOM E -1;
+		Stop;
+	}
+}
+
+class RepoDuck : Actor replaces Demon
+{
+	Default
+	{
+		Health 170;
+		Radius 26;
+		Height 64;
+		Speed 10;
+		PainChance 120;
+		Mass 400;
+		Scale 0.85;
+		MeleeRange 64;
+		Monster;
+		+FLOORCLIP;
+		BloodColor "Yellow";
+		SeeSound "repo/quack";
+		PainSound "repo/quack";
+		DeathSound "repo/quack";
+		ActiveSound "repo/quack";
+		DropItem "RepoGold", 255;
+	}
+	States
+	{
+	Spawn:
+		DUCK A 10 A_Look;
+		Loop;
+	See:
+		DUCK A 3 A_Chase;
+		DUCK B 3 A_Chase;
+		DUCK A 3 A_Chase;
+		DUCK B 3 A_Chase;
+		Loop;
+	Melee:
+		DUCK C 6 A_FaceTarget;
+		DUCK C 6 A_CustomMeleeAttack(random(4, 8) * 4, "repo/hurt");
+		Goto See;
+	Missile:
+		DUCK C 14 A_FaceTarget;
+		DUCK C 6 A_Recoil(-22);
+		DUCK B 6 A_Recoil(-12);
+		DUCK A 8;
+		Goto See;
+	Pain:
+		DUCK D 5;
+		DUCK D 5 A_Pain;
+		Goto See;
+	Death:
+		DUCK D 5;
+		DUCK E 6 A_Scream;
+		DUCK E 6 A_NoBlocking;
+		DUCK E -1;
+		Stop;
+	}
+}

@@ -1,0 +1,1 @@
+Put mod.pk3 next to GZDoom and run: gzdoom -iwad freedoom2.wad -file mod.pk3 (any Doom II IWAD works). Grab diamonds and gold bars to fill the quota, and avoid breaking vases.

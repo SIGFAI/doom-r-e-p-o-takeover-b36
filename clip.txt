@@ -1,0 +1,6 @@
+Moments the clip shows, in order:
+[x] 1. Gnomes (throwing knives) and a mutant duck rush the player at the start, HAUL / QUOTA counter on screen.
+[x] 2. Doom weapons hit the loot: a vase shatters and a red "VASE SHATTERED -$" toast appears.
+[x] 3. The player grabs diamonds / gold bars: ching, gold "+$" toast, HAUL rises.
+[x] 4. A gnome or the duck is shot: pain, death frame, gold coin burst and "+$" toast.
+[x] 5. Quota met: alarm, "QUOTA MET!" message, upgrades, and a duck arrives (seen around 40-45 s).

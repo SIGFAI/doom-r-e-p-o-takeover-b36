@@ -1,0 +1,31 @@
+PointLight REPOGEM
+{
+	color 0.3 0.7 1.0
+	size 70
+	offset 0 14 0
+}
+PointLight REPOGOLD
+{
+	color 1.0 0.8 0.2
+	size 70
+	offset 0 14 0
+}
+PointLight REPOVASE
+{
+	color 0.5 0.6 1.0
+	size 40
+	offset 0 24 0
+}
+Object RepoGem
+{
+	Frame GEMSA { Light REPOGEM }
+}
+Object RepoGold
+{
+	Frame GOLDA { Light REPOGOLD }
+}
+Object RepoVase
+{
+	Frame VASEA { Light REPOVASE }
+	Frame VASEB { Light REPOVASE }
+}
