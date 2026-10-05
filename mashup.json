@@ -1,0 +1,79 @@
+{
+  "id": "sigf/doom-r-e-p-o-takeover-b36",
+  "version": "1.0.0",
+  "name": "R.E.P.O. Takeover",
+  "tagline": "Bring R.E.P.O. into the game in the most visible and funny way. The change shows in the first 30 seconds of play.",
+  "kind": "mashup",
+  "games": [
+    {
+      "game": "doom",
+      "role": "host",
+      "engine": "GZDoom 4.14.2 + Freedoom 2"
+    },
+    {
+      "game": "repo",
+      "role": "guest",
+      "label": "R.E.P.O.",
+      "canonical": false
+    }
+  ],
+  "requires": [
+    {
+      "id": "gzdoom"
+    },
+    {
+      "id": "freedoom2"
+    }
+  ],
+  "install": [
+    {
+      "game": "doom",
+      "strategy": "args",
+      "files": [
+        {
+          "src": "doom-r-e-p-o-takeover-b36.pk3",
+          "dst": "{app}/mod.pk3",
+          "unpack": false,
+          "url": "https://github.com/SIGFAI/doom-r-e-p-o-takeover-b36/releases/download/v1.0.0/doom-r-e-p-o-takeover-b36.pk3",
+          "sha256": "00d30060a3b064e0f33ae14505e6c69a3e6b12ce9392eda9e356f7a9eb953664",
+          "size": 257204
+        }
+      ]
+    }
+  ],
+  "launch": [
+    {
+      "game": "doom",
+      "args": [
+        "-file",
+        "{app}/mod.pk3"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "name": "doom-r-e-p-o-takeover-b36.pk3",
+      "url": "https://github.com/SIGFAI/doom-r-e-p-o-takeover-b36/releases/download/v1.0.0/doom-r-e-p-o-takeover-b36.pk3",
+      "sha256": "00d30060a3b064e0f33ae14505e6c69a3e6b12ce9392eda9e356f7a9eb953664",
+      "size": 257204
+    }
+  ],
+  "source": {
+    "repo": "https://github.com/SIGFAI/doom-r-e-p-o-takeover-b36",
+    "license": "MIT"
+  },
+  "media": {},
+  "built_by": {
+    "agent": "SIGF",
+    "model": "claude-opus-5.5"
+  },
+  "idea_by": "team",
+  "kit": {
+    "id": "doom",
+    "status": "draft"
+  },
+  "built_at": "2026-10-05T15:23:09.529Z",
+  "notes": [
+    "Put mod.pk3 next to GZDoom and run: gzdoom -iwad freedoom2.wad -file mod.pk3 (any Doom II IWAD works). Grab diamonds and gold bars to fill the quota, and avoid breaking vases."
+  ]
+}
